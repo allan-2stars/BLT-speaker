@@ -4,6 +4,10 @@
 // Touch button for PIN confirmation
 const int ValidateButton = 14;
 const int ValidateButtonPressed = 40;  // touch limit
+// Define analog pin for volume
+#define VOLUME_PIN 34  // Change if needed
+
+int lastVolumeLevel = -1; // For tracking changes
 
 I2SStream i2s;
 BluetoothA2DPSink a2dp_sink(i2s);
@@ -59,7 +63,7 @@ void confirm() {
 
 void setup() {
   Serial.begin(115200);
-
+  analogReadResolution(12); // Optional: ESP32 default is 12-bit (0-4095)
   // Set the Power LED pin always on is not ideal
   // it should be like a breathing LED, fadein and fadeout every 3 seconds.
   pinMode(powerLEDPin, OUTPUT);
@@ -93,6 +97,7 @@ void setup() {
 
 void loop() {
   unsigned long now = millis();
+  updateVolume();  // Call this regularly
 
   // Confirm PIN if needed and button is touched
   if (a2dp_sink.pin_code() != 0 && touchRead(ValidateButton) < ValidateButtonPressed) {
@@ -165,5 +170,16 @@ void loop() {
       analogWrite(greenPin, 0);
       analogWrite(bluePin, 0);
     }
+  }
+}
+
+void updateVolume() {
+  int raw = analogRead(VOLUME_PIN); // e.g., GPIO34
+  int volume = map(raw, 0, 4095, 0, 100);  // Scale to 0–100%
+  
+  if (volume != lastVolumeLevel) {
+    a2dp_sink.set_volume(volume);  // set volume %
+    lastVolumeLevel = volume;
+    Serial.printf("Volume set to: %d%%\n", volume);
   }
 }
