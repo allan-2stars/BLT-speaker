@@ -45,6 +45,15 @@ volatile esp_a2d_audio_state_t audioState = ESP_A2D_AUDIO_STATE_STOPPED;
 // Timestamp for last audio state update
 unsigned long lastAudioStateChange = 0;
 
+// Digital control volumne
+#define VOLUME_UP_PIN 33
+#define VOLUME_DOWN_PIN 35
+static unsigned long lastButtonTime = 0;
+//const unsigned long debounceDelay = 200;
+
+int volumeLevel = 50;  // Start at 50%
+
+
 // Callback for audio state change
 void audio_state_changed(esp_a2d_audio_state_t state, void* ptr) {
   audioState = state;
@@ -64,6 +73,13 @@ void confirm() {
 void setup() {
   Serial.begin(115200);
   analogReadResolution(12); // Optional: ESP32 default is 12-bit (0-4095)
+
+  pinMode(VOLUME_UP_PIN, INPUT_PULLUP);
+  pinMode(VOLUME_DOWN_PIN, INPUT_PULLUP);
+  a2dp_sink.set_volume(volumeLevel);
+
+
+
   // Set the Power LED pin always on is not ideal
   // it should be like a breathing LED, fadein and fadeout every 3 seconds.
   pinMode(powerLEDPin, OUTPUT);
@@ -97,12 +113,22 @@ void setup() {
 
 void loop() {
   unsigned long now = millis();
-  updateVolume();  // Call this regularly
+  //updateVolume();  // Call this regularly
 
   // Confirm PIN if needed and button is touched
   if (a2dp_sink.pin_code() != 0 && touchRead(ValidateButton) < ValidateButtonPressed) {
     a2dp_sink.debounce(confirm, 5000);
   }
+
+  if (digitalRead(VOLUME_DOWN_PIN) == LOW && volumeLevel > 0) {
+    volumeLevel -= 5;
+    if (volumeLevel < 0) volumeLevel = 0;
+    a2dp_sink.set_volume(volumeLevel);
+    Serial.printf("Volume Down: %d%%\n", volumeLevel);
+    lastButtonTime = millis();
+  }
+  Serial.printf("Btn UP: %d, Btn DOWN: %d\n", digitalRead(VOLUME_UP_PIN), digitalRead(VOLUME_DOWN_PIN));
+
 
   // --- Pause/Play button handling ---
   int reading = digitalRead(pause_play_pin);
@@ -171,8 +197,29 @@ void loop() {
       analogWrite(bluePin, 0);
     }
   }
+
+
+
+if (millis() - lastButtonTime > debounceDelay) {
+  if (digitalRead(VOLUME_UP_PIN) == LOW && volumeLevel < 100) {
+    volumeLevel += 5;
+    a2dp_sink.set_volume(volumeLevel);
+    Serial.printf("Volume Up: %d%%\n", volumeLevel);
+    lastButtonTime = millis();
+  }
+
+  if (digitalRead(VOLUME_DOWN_PIN) == LOW && volumeLevel > 0) {
+    volumeLevel -= 5;
+    a2dp_sink.set_volume(volumeLevel);
+    Serial.printf("Volume Down: %d%%\n", volumeLevel);
+    lastButtonTime = millis();
+    }
+  }
+
 }
 
+// use below for physical potentionmeter
+// uncomment the function call from loop().
 void updateVolume() {
   int raw = analogRead(VOLUME_PIN); // e.g., GPIO34
   int volume = map(raw, 0, 4095, 0, 100);  // Scale to 0–100%
